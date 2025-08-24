@@ -4,13 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>アラビア語単語学習アプリ</title>
-    <link rel="stylesheet" href="stylesheet.css" type="text/css"
+    <link rel="stylesheet" href="stylesheet.css" type="text/css">
 </head>
 <body>
     <div class="container">
         <header class="header">
             <h1>🌙 アラビア語単語学習</h1>
-            <p>CSVファイルから単語を読み込んで効率的に学習</p>
+            <p>砂漠の風と共に学ぶ、美しいアラビア語の世界</p>
         </header>
 
         <div class="file-upload-section">
@@ -57,6 +57,14 @@
             </div>
         </div>
 
+        <div class="quiz-mode-selector hidden" id="quizModeSection">
+            <h3>🎯 学習モード</h3>
+            <div class="quiz-mode-buttons" id="quizModeButtons">
+                <button class="quiz-mode-btn active" data-mode="translation">🌟 翻訳モード</button>
+                <button class="quiz-mode-btn" data-mode="singular-plural">🔄 単数形⇔複数形</button>
+            </div>
+        </div>
+
         <div class="category-selector hidden" id="categorySection">
             <h3>カテゴリを選択</h3>
             <div class="category-buttons" id="categoryButtons">
@@ -65,12 +73,12 @@
 
         <div class="card-container">
             <div id="welcomeCard" style="display: block;">
-                <h2>📚 アラビア語単語学習へようこそ！</h2>
-                <p style="font-size: 1.2em; margin: 20px 0; color: #7f8c8d;">
-                    CSVファイルをアップロードして学習を開始してください
+                <h2>🕌 アラビア語単語学習へようこそ！</h2>
+                <p style="font-size: 1.2em; margin: 20px 0; color: #8B4513;">
+                    千夜一夜物語の言葉で学習の扉を開きましょう
                 </p>
-                <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0;">
-                    <h4 style="color: #667eea;">✨ 機能紹介</h4>
+                <div style="background: rgba(247, 233, 142, 0.1); padding: 20px; border-radius: 10px; margin: 20px 0; border: 1px solid rgba(212, 175, 55, 0.3);">
+                    <h4 style="color: #8B4513;">✨ 砂漠の学習機能</h4>
                     <ul style="text-align: left; margin: 15px 0;">
                         <li>🎯 品詞・課別の学習</li>
                         <li>🔊 音声発音機能</li>
@@ -81,17 +89,21 @@
                 </div>
             </div>
             <div id="wordCard" style="display: none;">
+                <div class="question-type-indicator" id="questionType">翻訳問題</div>
                 <div class="arabic-word" id="arabicWord">مرحبا</div>
                 <div class="pronunciation" id="pronunciation">[mar-ha-ban]</div>
                 <div class="word-info" id="wordInfo"></div>
                 <div class="meaning" id="meaning" style="display: none;">こんにちは</div>
+                
+                <!-- 選択肢モード -->
+                <div class="answer-choices hidden" id="answerChoices"></div>
                 
                 <div class="controls">
                     <button class="btn btn-primary" id="playAudio">🔊 発音</button>
                     <button class="btn btn-success" id="showAnswer">答えを見る</button>
                     <button class="btn btn-success" id="correct" style="display: none;">✓ 正解</button>
                     <button class="btn btn-danger" id="incorrect" style="display: none;">✗ 不正解</button>
-                    <button class="btn btn-warning" id="nextWord" style="display: none;">次の単語</button>
+                    <button class="btn btn-warning" id="nextWord" style="display: none;">次の問題</button>
                 </div>
 
                 <div class="difficulty-indicators">
@@ -120,6 +132,7 @@
 
         // アプリケーション状態
         let currentCategory = null;
+        let currentQuizMode = 'translation'; // 'translation', 'singular-plural'
         let currentWordIndex = 0;
         let studiedWords = new Set();
         let correctAnswers = 0;
@@ -128,6 +141,8 @@
         let showingAnswer = false;
         let dailyTarget = 10;
         let todayStudied = 0;
+        let currentChoices = [];
+        let correctAnswerIndex = -1;
 
         // DOM要素の取得
         const elements = {
@@ -135,6 +150,8 @@
             pronunciation: document.getElementById('pronunciation'),
             meaning: document.getElementById('meaning'),
             wordInfo: document.getElementById('wordInfo'),
+            questionType: document.getElementById('questionType'),
+            answerChoices: document.getElementById('answerChoices'),
             playAudio: document.getElementById('playAudio'),
             showAnswer: document.getElementById('showAnswer'),
             correct: document.getElementById('correct'),
@@ -149,6 +166,8 @@
             feedback: document.getElementById('feedback'),
             csvFileInput: document.getElementById('csvFileInput'),
             fileStatus: document.getElementById('fileStatus'),
+            quizModeSection: document.getElementById('quizModeSection'),
+            quizModeButtons: document.getElementById('quizModeButtons'),
             categorySection: document.getElementById('categorySection'),
             categoryButtons: document.getElementById('categoryButtons'),
             welcomeCard: document.getElementById('welcomeCard'),
@@ -166,6 +185,20 @@
         function setupEventListeners() {
             // CSVファイルアップロード
             elements.csvFileInput.addEventListener('change', handleFileUpload);
+
+            // クイズモード選択
+            elements.quizModeButtons.addEventListener('click', (e) => {
+                if (e.target.classList.contains('quiz-mode-btn')) {
+                    document.querySelectorAll('.quiz-mode-btn').forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
+                    currentQuizMode = e.target.dataset.mode;
+                    
+                    // モード変更時に新しい問題を読み込む
+                    if (isDataLoaded && currentCategory) {
+                        loadRandomWord();
+                    }
+                }
+            });
 
             // 音声再生
             elements.playAudio.addEventListener('click', playAudio);
@@ -264,6 +297,7 @@
                 isDataLoaded = true;
                 elements.welcomeCard.style.display = 'none';
                 elements.wordCard.style.display = 'block';
+                elements.quizModeSection.classList.remove('hidden');
                 elements.categorySection.classList.remove('hidden');
                 
                 setupCategories();
@@ -400,42 +434,218 @@
                 return;
             }
 
-            currentWordIndex = Math.floor(Math.random() * words.length);
-            const word = words[currentWordIndex];
+            // モードに応じて適切な単語を選択
+            let availableWords = words;
+            if (currentQuizMode === 'singular-plural') {
+                // 複数形がある単語のみをフィルター
+                availableWords = words.filter(word => word.plural && word.plural.trim() !== '');
+                if (availableWords.length === 0) {
+                    showFileError('このカテゴリには複数形のある単語がありません');
+                    return;
+                }
+            }
 
-            elements.arabicWord.textContent = word.arabic;
-            elements.meaning.textContent = word.meaning;
+            currentWordIndex = Math.floor(Math.random() * availableWords.length);
+            const word = availableWords[currentWordIndex];
+
+            // UI要素をリセット
+            resetUI();
+
+            // モードに応じて問題を生成
+            if (currentQuizMode === 'translation') {
+                setupTranslationMode(word);
+            } else if (currentQuizMode === 'singular-plural') {
+                setupSingularPluralMode(word, availableWords);
+            }
+
+            // 共通の単語情報を表示
+            displayWordInfo(word);
+
+            // 難易度表示の更新
+            updateDifficultyIndicators();
+        }
+
+        // UIをリセット
+        function resetUI() {
             elements.meaning.style.display = 'none';
-
-            // 単語情報を表示
-            let infoText = '';
-            if (word.partOfSpeech) infoText += `品詞: ${word.partOfSpeech}`;
-            if (word.gender) infoText += ` | 性: ${word.gender}`;
-            if (word.lesson) infoText += ` | 課: ${word.lesson}`;
-            if (word.plural) infoText += ` | 複数形: ${word.plural}`;
-            if (word.feminine) infoText += ` | 女性形: ${word.feminine}`;
-            elements.wordInfo.textContent = infoText;
-
-            // 発音記号は提供されていないので非表示
-            elements.pronunciation.style.display = 'none';
-
-            // ボタンの状態をリセット
-            elements.showAnswer.style.display = 'inline-block';
+            elements.answerChoices.classList.add('hidden');
+            elements.answerChoices.innerHTML = ''; // 選択肢をクリア
+            elements.showAnswer.style.display = 'none'; // 最初は非表示
             elements.correct.style.display = 'none';
             elements.incorrect.style.display = 'none';
             elements.nextWord.style.display = 'none';
             showingAnswer = false;
+            currentChoices = [];
+            correctAnswerIndex = -1;
+        }
 
-            // 難易度表示の更新
-            updateDifficultyIndicators();
+        // 翻訳モードのセットアップ
+        function setupTranslationMode(word) {
+            elements.questionType.textContent = '🌟 翻訳問題';
+            elements.arabicWord.textContent = word.arabic;
+            elements.meaning.textContent = word.meaning;
+            elements.pronunciation.style.display = 'none';
+            
+            // 翻訳モードでは選択肢を非表示にして、従来のボタンを表示
+            elements.answerChoices.classList.add('hidden');
+            elements.showAnswer.style.display = 'inline-block';
+        }
+
+        // 単数形⇔複数形モードのセットアップ
+        function setupSingularPluralMode(word, availableWords) {
+            const isPlural = Math.random() < 0.5; // ランダムに単数形→複数形か複数形→単数形を決定
+            
+            if (isPlural) {
+                // 単数形→複数形
+                elements.questionType.textContent = '🔄 単数形 → 複数形';
+                elements.arabicWord.textContent = word.arabic;
+                elements.meaning.textContent = `「${word.meaning}」の複数形は？`;
+                
+                // 選択肢を生成
+                const choices = generatePluralChoices(word, availableWords);
+                setupChoices(choices, word.plural);
+            } else {
+                // 複数形→単数形  
+                elements.questionType.textContent = '🔄 複数形 → 単数形';
+                elements.arabicWord.textContent = word.plural;
+                elements.meaning.textContent = `「${word.meaning}」の単数形は？`;
+                
+                // 選択肢を生成
+                const choices = generateSingularChoices(word, availableWords);
+                setupChoices(choices, word.arabic);
+            }
+            
+            elements.meaning.style.display = 'block';
+            elements.showAnswer.style.display = 'none';
+            elements.answerChoices.classList.remove('hidden');
+        }
+
+        // 複数形の選択肢を生成
+        function generatePluralChoices(correctWord, allWords) {
+            const choices = [correctWord.plural];
+            
+            // 他の単語の複数形を選択肢として追加
+            const otherWords = allWords.filter(w => w.plural && w.plural !== correctWord.plural);
+            
+            while (choices.length < 4 && otherWords.length > 0) {
+                const randomIndex = Math.floor(Math.random() * otherWords.length);
+                const randomWord = otherWords.splice(randomIndex, 1)[0];
+                if (!choices.includes(randomWord.plural)) {
+                    choices.push(randomWord.plural);
+                }
+            }
+            
+            // 選択肢が4つに満たない場合は、ダミーの複数形を追加
+            while (choices.length < 4) {
+                choices.push(`${correctWord.arabic}ات`); // 一般的な複数形パターン
+                break; // 実際には複数のパターンを追加
+            }
+            
+            return shuffleArray(choices);
+        }
+
+        // 単数形の選択肢を生成
+        function generateSingularChoices(correctWord, allWords) {
+            const choices = [correctWord.arabic];
+            
+            // 他の単語の単数形を選択肢として追加
+            const otherWords = allWords.filter(w => w.arabic !== correctWord.arabic);
+            
+            while (choices.length < 4 && otherWords.length > 0) {
+                const randomIndex = Math.floor(Math.random() * otherWords.length);
+                const randomWord = otherWords.splice(randomIndex, 1)[0];
+                if (!choices.includes(randomWord.arabic)) {
+                    choices.push(randomWord.arabic);
+                }
+            }
+            
+            return shuffleArray(choices);
+        }
+
+        // 配列をシャッフル
+        function shuffleArray(array) {
+            const shuffled = [...array];
+            for (let i = shuffled.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            }
+            return shuffled;
+        }
+
+        // 選択肢を設定
+        function setupChoices(choices, correctAnswer) {
+            currentChoices = choices;
+            correctAnswerIndex = choices.indexOf(correctAnswer);
+            
+            elements.answerChoices.innerHTML = ''; // 既存の選択肢をクリア
+            
+            choices.forEach((choice, index) => {
+                const button = document.createElement('button');
+                button.className = 'choice-btn';
+                button.textContent = choice;
+                button.addEventListener('click', () => handleChoiceClick(index));
+                elements.answerChoices.appendChild(button);
+            });
+        }
+
+        // 選択肢クリック処理
+        function handleChoiceClick(selectedIndex) {
+            // すべての選択肢ボタンからselectedクラスを削除
+            document.querySelectorAll('.choice-btn').forEach(btn => {
+                btn.classList.remove('selected');
+            });
+            
+            // クリックされた選択肢を選択状態に
+            const selectedButton = document.querySelectorAll('.choice-btn')[selectedIndex];
+            selectedButton.classList.add('selected');
+            
+            // 正解判定
+            const isCorrect = selectedIndex === correctAnswerIndex;
+            
+            // すべての選択肢の結果を表示
+            document.querySelectorAll('.choice-btn').forEach((btn, index) => {
+                btn.disabled = true;
+                if (index === correctAnswerIndex) {
+                    btn.classList.add('correct');
+                } else if (index === selectedIndex && !isCorrect) {
+                    btn.classList.add('incorrect');
+                }
+            });
+            
+            // 回答処理
+            setTimeout(() => {
+                handleAnswer(isCorrect);
+            }, 1000);
+        }
+
+        // 単語情報を表示
+        function displayWordInfo(word) {
+            let infoText = '';
+            if (word.partOfSpeech) infoText += `品詞: ${word.partOfSpeech}`;
+            if (word.gender) infoText += ` | 性: ${word.gender}`;
+            if (word.lesson) infoText += ` | 課: ${word.lesson}`;
+            if (currentQuizMode === 'translation') {
+                if (word.plural) infoText += ` | 複数形: ${word.plural}`;
+                if (word.feminine) infoText += ` | 女性形: ${word.feminine}`;
+            }
+            elements.wordInfo.textContent = infoText;
         }
 
         // 音声再生（Web Speech API使用）
         function playAudio() {
             if (!currentCategory || !wordDatabase[currentCategory]) return;
             
-            if ('speechSynthesis' in window) {
-                const utterance = new SpeechSynthesisUtterance(wordDatabase[currentCategory][currentWordIndex].arabic);
+            let textToSpeak = '';
+            if (currentQuizMode === 'translation') {
+                const words = wordDatabase[currentCategory];
+                const word = words[currentWordIndex];
+                textToSpeak = word.arabic;
+            } else if (currentQuizMode === 'singular-plural') {
+                textToSpeak = elements.arabicWord.textContent;
+            }
+            
+            if ('speechSynthesis' in window && textToSpeak) {
+                const utterance = new SpeechSynthesisUtterance(textToSpeak);
                 utterance.lang = 'ar-SA';
                 utterance.rate = 0.7;
                 speechSynthesis.speak(utterance);
@@ -446,16 +656,19 @@
 
         // 答えを表示
         function showAnswer() {
-            elements.meaning.style.display = 'block';
-            elements.showAnswer.style.display = 'none';
-            elements.correct.style.display = 'inline-block';
-            elements.incorrect.style.display = 'inline-block';
-            showingAnswer = true;
+            if (currentQuizMode === 'translation') {
+                elements.meaning.style.display = 'block';
+                elements.showAnswer.style.display = 'none';
+                elements.correct.style.display = 'inline-block';
+                elements.incorrect.style.display = 'inline-block';
+                showingAnswer = true;
+            }
+            // 選択肢モードでは showAnswer は使用しない
         }
 
         // 回答処理
         function handleAnswer(isCorrect) {
-            const wordKey = `${currentCategory}-${currentWordIndex}`;
+            const wordKey = `${currentCategory}-${currentWordIndex}-${currentQuizMode}`;
             studiedWords.add(wordKey);
             totalAnswers++;
 
@@ -463,14 +676,17 @@
                 correctAnswers++;
                 currentStreak++;
                 todayStudied++;
-                showFeedback('正解！', 'correct');
+                showFeedback('正解！ 素晴らしい！', 'correct');
             } else {
                 currentStreak = 0;
-                showFeedback('不正解', 'incorrect');
+                showFeedback('不正解... 次は頑張ろう！', 'incorrect');
             }
 
-            elements.correct.style.display = 'none';
-            elements.incorrect.style.display = 'none';
+            // UI更新
+            if (currentQuizMode === 'translation') {
+                elements.correct.style.display = 'none';
+                elements.incorrect.style.display = 'none';
+            }
             elements.nextWord.style.display = 'inline-block';
 
             updateStats();
