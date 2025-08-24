@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="ja" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>アラビア語単語学習アプリ</title>
+    <link rel="stylesheet" href="stylesheet.css" type="text/css"
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>🌙 アラビア語単語学習</h1>
+            <p>CSVファイルから単語を読み込んで効率的に学習</p>
+        </header>
+
+        <div class="file-upload-section">
+            <h3>📂 CSVファイルをアップロード</h3>
+            <div class="upload-instruction">
+                <h4>CSVファイル形式:</h4>
+                <p>以下の列を含むCSVファイルをアップロードしてください:</p>
+                <ul>
+                    <li><code>No.</code> - 番号</li>
+                    <li><code>アラビア語</code> - アラビア語の単語</li>
+                    <li><code>品詞</code> - 品詞（名詞、動詞など）</li>
+                    <li><code>文法性（単数形）</code> - 男性・女性など</li>
+                    <li><code>女性形</code> - 女性形（あれば）</li>
+                    <li><code>複数形</code> - 複数形（あれば）</li>
+                    <li><code>意味</code> - 日本語の意味</li>
+                    <li><code>課</code> - 課番号</li>
+                </ul>
+            </div>
+            <div class="file-input-wrapper">
+                <input type="file" id="csvFileInput" class="file-input" accept=".csv" />
+                <label for="csvFileInput" class="file-input-label">
+                    📁 CSVファイルを選択
+                </label>
+            </div>
+            <div id="fileStatus" class="file-status"></div>
+        </div>
+
+        <div class="stats-bar">
+            <div class="stat-item">
+                <div class="stat-value" id="studiedCount">0</div>
+                <div>学習済み</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="correctRate">0%</div>
+                <div>正答率</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="streak">0</div>
+                <div>連続正解</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="totalWords">0</div>
+                <div>総単語数</div>
+            </div>
+        </div>
+
+        <div class="category-selector hidden" id="categorySection">
+            <h3>カテゴリを選択</h3>
+            <div class="category-buttons" id="categoryButtons">
+            </div>
+        </div>
+
+        <div class="card-container">
+            <div id="welcomeCard" style="display: block;">
+                <h2>📚 アラビア語単語学習へようこそ！</h2>
+                <p style="font-size: 1.2em; margin: 20px 0; color: #7f8c8d;">
+                    CSVファイルをアップロードして学習を開始してください
+                </p>
+                <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0;">
+                    <h4 style="color: #667eea;">✨ 機能紹介</h4>
+                    <ul style="text-align: left; margin: 15px 0;">
+                        <li>🎯 品詞・課別の学習</li>
+                        <li>🔊 音声発音機能</li>
+                        <li>📊 進捗追跡</li>
+                        <li>🔄 反復学習システム</li>
+                        <li>📱 レスポンシブデザイン</li>
+                    </ul>
+                </div>
+            </div>
+            <div id="wordCard" style="display: none;">
+                <div class="arabic-word" id="arabicWord">مرحبا</div>
+                <div class="pronunciation" id="pronunciation">[mar-ha-ban]</div>
+                <div class="word-info" id="wordInfo"></div>
+                <div class="meaning" id="meaning" style="display: none;">こんにちは</div>
+                
+                <div class="controls">
+                    <button class="btn btn-primary" id="playAudio">🔊 発音</button>
+                    <button class="btn btn-success" id="showAnswer">答えを見る</button>
+                    <button class="btn btn-success" id="correct" style="display: none;">✓ 正解</button>
+                    <button class="btn btn-danger" id="incorrect" style="display: none;">✗ 不正解</button>
+                    <button class="btn btn-warning" id="nextWord" style="display: none;">次の単語</button>
+                </div>
+
+                <div class="difficulty-indicators">
+                    <div class="difficulty-dot easy"></div>
+                    <div class="difficulty-dot medium"></div>
+                    <div class="difficulty-dot hard"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="progress-section">
+            <h3>今日の進捗</h3>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+            </div>
+            <p id="progressText">0 / 10 単語完了</p>
+        </div>
+    </div>
+
+    <div class="floating-feedback" id="feedback"></div>
+
+    <script>
+        // アラビア語単語データベース
+        let wordDatabase = {};
+        let isDataLoaded = false;
+
+        // アプリケーション状態
+        let currentCategory = null;
+        let currentWordIndex = 0;
+        let studiedWords = new Set();
+        let correctAnswers = 0;
+        let totalAnswers = 0;
+        let currentStreak = 0;
+        let showingAnswer = false;
+        let dailyTarget = 10;
+        let todayStudied = 0;
+
+        // DOM要素の取得
+        const elements = {
+            arabicWord: document.getElementById('arabicWord'),
+            pronunciation: document.getElementById('pronunciation'),
+            meaning: document.getElementById('meaning'),
+            wordInfo: document.getElementById('wordInfo'),
+            playAudio: document.getElementById('playAudio'),
+            showAnswer: document.getElementById('showAnswer'),
+            correct: document.getElementById('correct'),
+            incorrect: document.getElementById('incorrect'),
+            nextWord: document.getElementById('nextWord'),
+            studiedCount: document.getElementById('studiedCount'),
+            correctRate: document.getElementById('correctRate'),
+            streak: document.getElementById('streak'),
+            totalWords: document.getElementById('totalWords'),
+            progressFill: document.getElementById('progressFill'),
+            progressText: document.getElementById('progressText'),
+            feedback: document.getElementById('feedback'),
+            csvFileInput: document.getElementById('csvFileInput'),
+            fileStatus: document.getElementById('fileStatus'),
+            categorySection: document.getElementById('categorySection'),
+            categoryButtons: document.getElementById('categoryButtons'),
+            welcomeCard: document.getElementById('welcomeCard'),
+            wordCard: document.getElementById('wordCard')
+        };
+
+        // 初期化
+        function init() {
+            setupEventListeners();
+            updateStats();
+            updateProgress();
+        }
+
+        // イベントリスナーの設定
+        function setupEventListeners() {
+            // CSVファイルアップロード
+            elements.csvFileInput.addEventListener('change', handleFileUpload);
+
+            // 音声再生
+            elements.playAudio.addEventListener('click', playAudio);
+
+            // 答えを表示
+            elements.showAnswer.addEventListener('click', showAnswer);
+
+            // 正解・不正解
+            elements.correct.addEventListener('click', () => handleAnswer(true));
+            elements.incorrect.addEventListener('click', () => handleAnswer(false));
+
+            // 次の単語
+            elements.nextWord.addEventListener('click', loadRandomWord);
+        }
+
+        // CSVファイルアップロード処理
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            elements.fileStatus.textContent = 'ファイルを読み込み中...';
+            elements.fileStatus.className = 'file-status';
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const csvText = e.target.result;
+                    parseCSV(csvText);
+                } catch (error) {
+                    showFileError('ファイルの読み込みに失敗しました: ' + error.message);
+                }
+            };
+
+            reader.onerror = function() {
+                showFileError('ファイルの読み込みに失敗しました');
+            };
+
+            reader.readAsText(file, 'UTF-8');
+        }
+
+        // CSV解析
+        function parseCSV(csvText) {
+            try {
+                const lines = csvText.trim().split('\n');
+                if (lines.length < 2) {
+                    throw new Error('CSVファイルにデータが不足しています');
+                }
+
+                // ヘッダー行を取得
+                const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+                
+                // 必要な列があることを確認
+                const requiredColumns = ['アラビア語', '意味'];
+                const missingColumns = requiredColumns.filter(col => !headers.includes(col));
+                if (missingColumns.length > 0) {
+                    throw new Error(`必要な列が見つかりません: ${missingColumns.join(', ')}`);
+                }
+
+                // データを解析
+                const words = [];
+                for (let i = 1; i < lines.length; i++) {
+                    const row = parseCSVRow(lines[i]);
+                    if (row.length < headers.length) continue;
+
+                    const wordData = {};
+                    headers.forEach((header, index) => {
+                        wordData[header] = row[index] ? row[index].trim() : null;
+                    });
+
+                    // 必要なデータがあるかチェック
+                    if (wordData['アラビア語'] && wordData['意味']) {
+                        words.push({
+                            no: wordData['No.'] || i,
+                            arabic: wordData['アラビア語'],
+                            partOfSpeech: wordData['品詞'] || '',
+                            gender: wordData['文法性（単数形）'] || '',
+                            feminine: wordData['女性形'] || '',
+                            plural: wordData['複数形'] || '',
+                            meaning: wordData['意味'],
+                            lesson: parseInt(wordData['課']) || 1
+                        });
+                    }
+                }
+
+                if (words.length === 0) {
+                    throw new Error('有効な単語データが見つかりませんでした');
+                }
+
+                // データベースを構築
+                buildWordDatabase(words);
+                
+                elements.fileStatus.textContent = `✅ ${words.length}個の単語を読み込みました！`;
+                elements.fileStatus.className = 'file-status success';
+                
+                // UIを更新
+                isDataLoaded = true;
+                elements.welcomeCard.style.display = 'none';
+                elements.wordCard.style.display = 'block';
+                elements.categorySection.classList.remove('hidden');
+                
+                setupCategories();
+                updateStats();
+                
+            } catch (error) {
+                showFileError(error.message);
+            }
+        }
+
+        // CSV行を解析（カンマ区切り、引用符対応）
+        function parseCSVRow(row) {
+            const result = [];
+            let current = '';
+            let inQuotes = false;
+            
+            for (let i = 0; i < row.length; i++) {
+                const char = row[i];
+                
+                if (char === '"') {
+                    inQuotes = !inQuotes;
+                } else if (char === ',' && !inQuotes) {
+                    result.push(current);
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            
+            result.push(current);
+            return result;
+        }
+
+        // 単語データベースを構築
+        function buildWordDatabase(words) {
+            wordDatabase = {};
+            
+            words.forEach(word => {
+                // 品詞別カテゴリ
+                if (word.partOfSpeech) {
+                    const posCategory = `品詞_${word.partOfSpeech}`;
+                    if (!wordDatabase[posCategory]) {
+                        wordDatabase[posCategory] = [];
+                    }
+                    wordDatabase[posCategory].push(word);
+                }
+
+                // 課別カテゴリ
+                const lessonCategory = `課${word.lesson}`;
+                if (!wordDatabase[lessonCategory]) {
+                    wordDatabase[lessonCategory] = [];
+                }
+                wordDatabase[lessonCategory].push(word);
+
+                // 全単語カテゴリ
+                if (!wordDatabase['全単語']) {
+                    wordDatabase['全単語'] = [];
+                }
+                wordDatabase['全単語'].push(word);
+            });
+        }
+
+        // カテゴリボタンを設定
+        function setupCategories() {
+            elements.categoryButtons.innerHTML = '';
+
+            // カテゴリを作成（課を優先して表示）
+            const categories = Object.keys(wordDatabase).sort((a, b) => {
+                if (a === '全単語') return -1;
+                if (b === '全単語') return 1;
+                if (a.startsWith('課') && b.startsWith('課')) {
+                    return parseInt(a.replace('課', '')) - parseInt(b.replace('課', ''));
+                }
+                if (a.startsWith('課')) return -1;
+                if (b.startsWith('課')) return 1;
+                return a.localeCompare(b);
+            });
+
+            categories.forEach((category, index) => {
+                const button = document.createElement('button');
+                button.className = 'category-btn';
+                button.dataset.category = category;
+                
+                // カテゴリ名を日本語で表示
+                let displayName = category;
+                if (category === '全単語') {
+                    displayName = `全単語 (${wordDatabase[category].length})`;
+                } else if (category.startsWith('課')) {
+                    displayName = `${category} (${wordDatabase[category].length}語)`;
+                } else if (category.startsWith('品詞_')) {
+                    const pos = category.replace('品詞_', '');
+                    displayName = `${pos} (${wordDatabase[category].length}語)`;
+                }
+                
+                button.textContent = displayName;
+                
+                // イベントリスナーを追加
+                button.addEventListener('click', (e) => {
+                    document.querySelectorAll('.category-btn').forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
+                    currentCategory = category;
+                    loadRandomWord();
+                });
+                
+                if (index === 0) {
+                    button.classList.add('active');
+                    currentCategory = category;
+                }
+                
+                elements.categoryButtons.appendChild(button);
+            });
+
+            // 最初の単語を読み込み
+            if (currentCategory && wordDatabase[currentCategory]) {
+                loadRandomWord();
+            }
+        }
+
+        // ファイルエラー表示
+        function showFileError(message) {
+            elements.fileStatus.textContent = '❌ ' + message;
+            elements.fileStatus.className = 'file-status error';
+        }
+
+        // ランダムな単語を読み込み
+        function loadRandomWord() {
+            if (!isDataLoaded || !currentCategory || !wordDatabase[currentCategory]) {
+                return;
+            }
+
+            const words = wordDatabase[currentCategory];
+            if (words.length === 0) {
+                showFileError('選択されたカテゴリに単語がありません');
+                return;
+            }
+
+            currentWordIndex = Math.floor(Math.random() * words.length);
+            const word = words[currentWordIndex];
+
+            elements.arabicWord.textContent = word.arabic;
+            elements.meaning.textContent = word.meaning;
+            elements.meaning.style.display = 'none';
+
+            // 単語情報を表示
+            let infoText = '';
+            if (word.partOfSpeech) infoText += `品詞: ${word.partOfSpeech}`;
+            if (word.gender) infoText += ` | 性: ${word.gender}`;
+            if (word.lesson) infoText += ` | 課: ${word.lesson}`;
+            if (word.plural) infoText += ` | 複数形: ${word.plural}`;
+            if (word.feminine) infoText += ` | 女性形: ${word.feminine}`;
+            elements.wordInfo.textContent = infoText;
+
+            // 発音記号は提供されていないので非表示
+            elements.pronunciation.style.display = 'none';
+
+            // ボタンの状態をリセット
+            elements.showAnswer.style.display = 'inline-block';
+            elements.correct.style.display = 'none';
+            elements.incorrect.style.display = 'none';
+            elements.nextWord.style.display = 'none';
+            showingAnswer = false;
+
+            // 難易度表示の更新
+            updateDifficultyIndicators();
+        }
+
+        // 音声再生（Web Speech API使用）
+        function playAudio() {
+            if (!currentCategory || !wordDatabase[currentCategory]) return;
+            
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(wordDatabase[currentCategory][currentWordIndex].arabic);
+                utterance.lang = 'ar-SA';
+                utterance.rate = 0.7;
+                speechSynthesis.speak(utterance);
+            } else {
+                showFeedback('音声機能がサポートされていません', 'incorrect');
+            }
+        }
+
+        // 答えを表示
+        function showAnswer() {
+            elements.meaning.style.display = 'block';
+            elements.showAnswer.style.display = 'none';
+            elements.correct.style.display = 'inline-block';
+            elements.incorrect.style.display = 'inline-block';
+            showingAnswer = true;
+        }
+
+        // 回答処理
+        function handleAnswer(isCorrect) {
+            const wordKey = `${currentCategory}-${currentWordIndex}`;
+            studiedWords.add(wordKey);
+            totalAnswers++;
+
+            if (isCorrect) {
+                correctAnswers++;
+                currentStreak++;
+                todayStudied++;
+                showFeedback('正解！', 'correct');
+            } else {
+                currentStreak = 0;
+                showFeedback('不正解', 'incorrect');
+            }
+
+            elements.correct.style.display = 'none';
+            elements.incorrect.style.display = 'none';
+            elements.nextWord.style.display = 'inline-block';
+
+            updateStats();
+            updateProgress();
+        }
+
+        // 統計情報の更新
+        function updateStats() {
+            elements.studiedCount.textContent = studiedWords.size;
+            elements.correctRate.textContent = totalAnswers > 0 ? 
+                Math.round((correctAnswers / totalAnswers) * 100) + '%' : '0%';
+            elements.streak.textContent = currentStreak;
+            
+            // 総単語数の計算
+            let totalWordCount = 0;
+            if (wordDatabase && wordDatabase['全単語']) {
+                totalWordCount = wordDatabase['全単語'].length;
+            }
+            elements.totalWords.textContent = totalWordCount;
+        }
+
+        // 進捗の更新
+        function updateProgress() {
+            const progressPercentage = Math.min((todayStudied / dailyTarget) * 100, 100);
+            elements.progressFill.style.width = progressPercentage + '%';
+            elements.progressText.textContent = `${todayStudied} / ${dailyTarget} 単語完了`;
+        }
+
+        // 難易度表示の更新
+        function updateDifficultyIndicators() {
+            const dots = document.querySelectorAll('.difficulty-dot');
+            dots.forEach(dot => {
+                dot.className = 'difficulty-dot';
+            });
+
+            // 簡単な判定ロジック（実際にはより複雑な算出が可能）
+            const wordKey = `${currentCategory}-${currentWordIndex}`;
+            if (studiedWords.has(wordKey)) {
+                dots[0].classList.add('easy');
+            } else {
+                dots[2].classList.add('hard');
+            }
+        }
+
+        // フィードバック表示
+        function showFeedback(message, type) {
+            elements.feedback.textContent = message;
+            elements.feedback.className = `floating-feedback ${type} show`;
+            
+            setTimeout(() => {
+                elements.feedback.classList.remove('show');
+            }, 1500);
+        }
+
+        // アプリケーション開始
+        init();
+    </script>
+</body>
+</html>
